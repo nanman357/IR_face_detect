@@ -1,9 +1,7 @@
-import face_recognition
-import os
 import cv2
-import numpy as np
-face_cascade = cv2.CascadeClassifier("data\\haarcascades\\haarcascade_frontalface_default.xml")
-video = cv2.VideoCapture("C:\\Users\\Dave\\Downloads\\ytdl\\2\\2.mp4")
+
+face_cascade = cv2.CascadeClassifier('data\\haarcascades\\haarcascade_frontalface_default.xml')
+video = cv2.VideoCapture('data\\video\\2.mp4')
 
 frame_count = 0
 while True:
