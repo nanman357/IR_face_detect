@@ -1,9 +1,10 @@
 import cv2
 
 face_cascade = cv2.CascadeClassifier('data\\haarcascades\\haarcascade_frontalface_default.xml')
-video = cv2.VideoCapture('data\\video\\2.mp4')
+video = cv2.VideoCapture('G:\\tufts.mov')
 
 frame_count = 0
+face_frame_count = 0
 while True:
     check, frame = video.read()
     grayscale = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
@@ -18,13 +19,15 @@ while True:
                       (255,0,0),1)
         roi_gray = grayscale[y:y+h, x:x+w]
         roi_color = frame[y:y+h, x:x+w]
-
+        face_frame_count = face_frame_count + 1
     cv2.imshow('Video_yt', grayscale)
 
     key = cv2.waitKey(1)
     frame_count = frame_count + 1
+
     if key == ord('q'):
-        print(frame_count)
+        print('frame_count ', frame_count)
+        print('face_frame_count ', face_frame_count)
         break
 
 
