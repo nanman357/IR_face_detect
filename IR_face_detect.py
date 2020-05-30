@@ -1,7 +1,10 @@
 import cv2
+#url = "rtsp://admin:admin@192.168.1.108:80/cam/realmonitor?channel=1&subtype=0" - regular
+#url = "rtsp://admin:admin@192.168.1.108:80/cam/realmonitor?channel=2&subtype=1" - thermal
+url = "rtsp://admin:admin@192.168.1.108:80/cam/realmonitor?channel=2&subtype=0"
 
 face_cascade = cv2.CascadeClassifier('data\\haarcascades\\haarcascade_frontalface_default.xml')
-video = cv2.VideoCapture('G:\\tufts.mov')
+video = cv2.VideoCapture(url)
 
 frame_count = 0
 face_frame_count = 0
