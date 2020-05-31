@@ -11,7 +11,7 @@ frame_count = 0
 face_frame_count = 0
 while True:
     check_color, frame_color = color_video.read()
-    check_thermal, frame_thermal = color_video.read()
+    check_thermal, frame_thermal = thermal_video.read()
     grayscale_color = cv2.cvtColor(frame_color, cv2.COLOR_BGR2GRAY)
     grayscale_thermal = cv2.cvtColor(frame_thermal, cv2.COLOR_BGR2GRAY)
     faces = face_cascade.detectMultiScale(grayscale_color,
@@ -19,7 +19,7 @@ while True:
                                           minNeighbors=5)
 
     for(x,y,w,h) in faces:
-        cv2.rectangle(grayscale_color,
+        cv2.rectangle(frame_color,
                       (x,y),
                       (x+w,y+h),
                       (255,0,0),1)
@@ -29,8 +29,9 @@ while True:
         (minVal, maxVal, minLoc, maxLoc) = cv2.minMaxLoc(roi_thermal)
         #print(height, width, h, w, maxLoc, maxVal)
         #face_frame_count = face_frame_count + 1
-        cv2.circle(grayscale_color, (maxLoc[0] + x, maxLoc[1] + y), 5, (0, 0, 255), 2)
-    cv2.imshow('live_video', grayscale_color)
+        cv2.circle(frame_color, (maxLoc[0] + x, maxLoc[1] + y), 5, (0, 0, 255), 2)
+    cv2.imshow('live_video', frame_color)
+    cv2.imshow('thermal_video', frame_thermal)
 
     key = cv2.waitKey(1)
     frame_count = frame_count + 1
