@@ -47,35 +47,52 @@ class WebcamVideoStream:
 color_video = WebcamVideoStream(src=color_url).start()
 thermal_video = WebcamVideoStream(src=thermal_url).start()
 
+# width_color = frame_color.shape[0]
+# height_color = frame_color.shape[1]
+# width_thermal = frame_thermal.shape[0]
+# heigth_thermal = frame_thermal.shape[1]
+
+#print(width_color, height_color)
+#print(width_thermal, heigth_thermal)
+
+bb_roi = None
 while True:
     frame_color = color_video.read()
-    frame_color = imutils.resize(frame_color, width=640)
-    frame_thermal = thermal_video.read()
-    frame_thermal = imutils.resize(frame_thermal, width=640)
 
+    frame_thermal = thermal_video.read()
+
+    #print('thermal', frame_thermal.shape)
+    #print('color', frame_color.shape)
     grayscale_color = cv2.cvtColor(frame_color, cv2.COLOR_BGR2GRAY)
     grayscale_thermal = cv2.cvtColor(frame_thermal, cv2.COLOR_BGR2GRAY)
-    faces = face_cascade.detectMultiScale(grayscale_color,
+    faces = face_cascade.detectMultiScale(frame_color,
                                           scaleFactor=1.3,
                                           minNeighbors=5)
 
+
+    # crop color frame to size roughly of thermal frame
+    frame_color = frame_color[60:1020,320:1600]
+
+    #select area of black-body on thermal camera
+    while bb_roi == None:
+        bb_roi = cv2.selectROI(frame_thermal)
+        cv2.destroyAllWindows()
+
     for(x,y,w,h) in faces:
-        cv2.rectangle(frame_color,
+        cv2.rectangle(frame_thermal,
                       (x,y),
                       (x+w,y+h),
                       (255,0,0),1)
-        roi_gray = grayscale_color[y:y+h, x:x+w]
+        #roi_gray = grayscale_color[y:y+h, x:x+w]
         #roi_color = frame_color[y:y+h, x:x+w]
         roi_thermal = grayscale_thermal[y:y+h, x:x+w]
         (minVal, maxVal, minLoc, maxLoc) = cv2.minMaxLoc(roi_thermal)
         #print(height, width, h, w, maxLoc, maxVal)
         #face_frame_count = face_frame_count + 1
-        cv2.circle(frame_color, (maxLoc[0] + x, maxLoc[1] + y), 5, (0, 0, 255), 2)
+        cv2.circle(frame_thermal, (maxLoc[0] + x, maxLoc[1] + y), 5, (0, 0, 255), 2)
 
-
-    cv2.imshow('live_video', frame_color)
-    cv2.imshow('thermal_video', frame_thermal)
-
+    frame_thermal = imutils.resize(frame_thermal, width=640)
+    frame_color = imutils.resize(frame_color, width=640)
 
     cv2.imshow('live_video', frame_color)
     cv2.imshow('thermal_video', frame_thermal)
