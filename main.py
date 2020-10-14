@@ -1,6 +1,7 @@
 import cv2
 import imutils
 from threading import Thread
+import numpy as np
 
 
 color_url = "rtsp://admin:admin@192.168.1.108:80/cam/realmonitor?channel=1&subtype=0"
@@ -64,10 +65,10 @@ roi_bb = None
 while True:
     frame_color = color_video.read()
     frame_thermal = thermal_video.read()
-
+    #print(frame_thermal.dtype) #bitrate
     #print('thermal', frame_thermal.shape)
     #print('color', frame_color.shape)
-    grayscale_color = cv2.cvtColor(frame_color, cv2.COLOR_BGR2GRAY)
+    #grayscale_color = cv2.cvtColor(frame_color, cv2.COLOR_BGR2GRAY)
     grayscale_thermal = cv2.cvtColor(frame_thermal, cv2.COLOR_BGR2GRAY)
     faces = face_cascade.detectMultiScale(frame_color,
                                           scaleFactor=1.3,
@@ -81,15 +82,24 @@ while True:
     #select area of black-body on thermal camera
     while roi_bb == None:
         roi_bb = cv2.selectROI(frame_thermal)
+        roi_bb_ = grayscale_thermal[int(roi_bb[1]):int(roi_bb[1]+roi_bb[3]), int(roi_bb[0]):int(roi_bb[0]+roi_bb[2])]
         cv2.destroyAllWindows()
-    (minVal_bb, maxVal_bb, minLoc_bb, maxLoc_bb) = cv2.minMaxLoc(roi_bb)
+        roi_bb_ = roi_bb_[0]
+    #print(roi_bb[1],roi_bb[3],roi_bb[0],roi_bb[2])
+    #print(roi_bb_[0])
+
     for(x,y,w,h) in faces:
         #roi_gray = grayscale_color[y:y+h, x:x+w]
         #roi_color = frame_color[y:y+h, x:x+w]
 
         roi_thermal = grayscale_thermal[y - color_height_crop : y + h - color_height_crop,
-                                        x - color_width_crop : x + w - color_width_crop]
+                                        x - color_width_crop : x + w - color_width_crop][0]
         (minVal_thermal, maxVal_thermal, minLoc_thermal, maxLoc_thermal) = cv2.minMaxLoc(roi_thermal)
+        (minVal_bb, maxVal_bb, minLoc_bb, maxLoc_bb) = cv2.minMaxLoc(roi_bb_)
+        print(roi_bb_)
+        print(roi_thermal)
+        #maxVal_bb = np.max(roi_bb)
+        #maxVal_thermal = np.max(roi_thermal)
         #print(height, width, h, w, maxLoc, maxVal)
         #face_frame_count = face_frame_count + 1
         print('bb: ', maxVal_bb)
