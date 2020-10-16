@@ -51,12 +51,20 @@ def masking(roi, bounds):
     for (lower, upper) in bounds:
         lower = np.array(lower, dtype="uint8")
         upper = np.array(upper, dtype="uint8")
-        mask = cv2.inRange(roi, lower, upper)
-        output = cv2.bitwise_and(roi, roi, mask=mask)
+        try:
+            mask = cv2.inRange(roi, lower, upper)
+            output = cv2.bitwise_and(roi, roi, mask=mask)
+            (red_thermal_output, green_thermal_output, blue_thermal_output) = cv2.split(output)
+            return np.max(red_thermal_output)
+        except:
+            break
 
-        (red_thermal_output, green_thermal_output, blue_thermal_output) = cv2.split(output)
-        return np.max(red_thermal_output)
 
+def minmaxlox(input, roi):
+    grayscale_thermal = cv2.cvtColor(input, cv2.COLOR_BGR2GRAY)
+    roi_grayscale = grayscale_thermal[int(roi[1]):int(roi[1] + roi[3]), int(roi[0]):int(roi[0] + roi[2])]
+    (minVal, maxVal, minLoc, maxLoc) = cv2.minMaxLoc(roi_grayscale)
+    return minVal, maxVal, minLoc, maxLoc
 
 color_video = WebcamVideoStream(src=color_url).start()
 thermal_video = WebcamVideoStream(src=thermal_url).start()
@@ -88,34 +96,50 @@ while True:
         roi_bb_rgb = rgb_thermal[int(roi_bb[1]):int(roi_bb[1] + roi_bb[3]), int(roi_bb[0]):int(roi_bb[0] + roi_bb[2])]
         cv2.destroyAllWindows()
 
+    throat_correction = 250 # used to include chin and throat in roi_thermal_face
     # face detection for-loop & selecting faces with temp > bb
     for (x, y, w, h) in faces:
-        roi_thermal_face = rgb_thermal[y - color_height_crop: y + h - color_height_crop + 250,
+        roi_thermal_face = rgb_thermal[y - color_height_crop: y + h - color_height_crop + throat_correction,
                            x - color_width_crop: x + w - color_width_crop]
 
-        # for (lower, upper) in boundary:
-        #     lower = np.array(lower, dtype="uint8")
-        #     upper = np.array(upper, dtype="uint8")
-        #     mask = cv2.inRange(roi_thermal_face, lower, upper)
-        #     output = cv2.bitwise_and(roi_thermal_face, roi_thermal_face, mask=mask)
-        #     output = cv2.cvtColor(output, cv2.COLOR_BGR2RGB)
-        #     cv2.imshow("images", np.hstack([roi_thermal_face, output]))
-        #     (red_thermal_output, green_thermal_output, blue_thermal_output) = cv2.split(output)
-        #     print(np.max(red_thermal_output), np.max(green_thermal_output), np.max(blue_thermal_output))
+        roi_thermal_face_result = masking(roi_thermal_face, boundary)
+        roi_bb_rgb_result = masking(roi_bb_rgb, boundary)
 
         try:
-            if masking(roi_thermal_face, boundary) < masking(roi_bb_rgb, boundary):
+            if roi_thermal_face_result < roi_bb_rgb_result:
+                # bb is hottest & has 'red mark'
                 test = (0, 255, 0)
-            else:  # face hotter than bb
+                print('bb')
+            elif roi_thermal_face_result > roi_bb_rgb_result:
+                # face is hottest and has 'red mark'
                 test = (0, 0, 255)
+                print('face')
+            elif roi_thermal_face_result == roi_bb_rgb_result and roi_thermal_face_result == 0:
+                # no red mark in roi's
+                roi_thermal_face_2 = (x - color_width_crop, y - color_height_crop, w, h + throat_correction)
+                if minmaxlox(frame_thermal, roi_bb)[0] < minmaxlox(frame_thermal, roi_thermal_face_2)[0]:
+                    # bb is hotter but has no 'red mark'
+                    print(minmaxlox(frame_thermal, roi_bb)[0])
+                    print(minmaxlox(frame_thermal, roi_thermal_face_2)[0])
+                    test = (0, 255, 0)
+                    print('bb other')
+                else:
+                    # face is hotter but has no 'red mark'
+                    print(minmaxlox(frame_thermal, roi_bb)[0])
+                    print(minmaxlox(frame_thermal, roi_thermal_face_2)[0])
+                    test = (255, 0, 255)
+                    print('face other')
         except:
-            test = (255, 255, 255)
+            test = (70, 225, 25)
+            print('fail')
             continue
 
         cv2.rectangle(frame_thermal,
                       (x - color_width_crop, y - color_height_crop),
                       (x + w - color_width_crop, y + h - color_height_crop),
                       test, 3)
+
+        del roi_thermal_face_result, roi_bb_rgb_result
 
     frame_thermal = imutils.resize(frame_thermal, width=640)
     frame_color = imutils.resize(frame_color, width=640)
