@@ -1,185 +1,144 @@
-from PyQt5 import QtCore, QtGui
-import qdarkstyle
-from threading import Thread
-from collections import deque
-from datetime import datetime
-import time
-import sys
 import cv2
 import imutils
+from threading import Thread
+import numpy as np
 
-class CameraWidget(QtGui.QWidget):
-    """Independent camera feed
-    Uses threading to grab IP camera frames in the background
+#print(cv2.getBuildInformation())
+#C:\\Users\\Dave\\Videos\\Any Video Converter\\MOV\\20000101_180402_channelT_x264.mov
+color_url = 'D:\\thermal\\MD_2020-11-05\\sklep\\20000101_180402_channelV.avi'
+thermal_url = 'D:\\thermal\\MD_2020-11-05\\sklep\\20000101_180402_channelT.avi'
 
-    @param width - Width of the video frame
-    @param height - Height of the video frame
-    @param stream_link - IP/RTSP/Webcam link
-    @param aspect_ratio - Whether to maintain frame aspect ratio or force into fraame
-    """
+face_cascade = cv2.CascadeClassifier('data\\haarcascades\\haarcascade_frontalface_default.xml')
+color_video = cv2.VideoCapture(color_url)
+thermal_video = cv2.VideoCapture(thermal_url)
 
-    def __init__(self, width, height, stream_link=0, aspect_ratio=False, parent=None, deque_size=1):
-        super(CameraWidget, self).__init__(parent)
+frame_count = 0
+face_frame_count = 0
 
-        # Initialize deque used to store frames read from the stream
-        self.deque = deque(maxlen=deque_size)
+#color_video = WebcamVideoStream(src=color_url).start()
+#thermal_video = WebcamVideoStream(src=thermal_url).start()
 
-        # Slight offset is needed since PyQt layouts have a built in padding
-        # So add offset to counter the padding
-        self.offset = 16
-        self.screen_width = width - self.offset
-        self.screen_height = height - self.offset
-        self.maintain_aspect_ratio = aspect_ratio
+color_width_original = 1920
+color_height_origial = 1080
+color_width_crop = 320
+color_height_crop = 60
 
-        self.camera_stream_link = stream_link
+def masking(roi, bounds):
+    for (lower, upper) in bounds:
+        lower = np.array(lower, dtype="uint8")
+        upper = np.array(upper, dtype="uint8")
+        try:
+            mask = cv2.inRange(roi, lower, upper)
+            output = cv2.bitwise_and(roi, roi, mask=mask)
+            (red_thermal_output, green_thermal_output, blue_thermal_output) = cv2.split(output)
+            return np.max(red_thermal_output)
+        except:
+            break
 
-        # Flag to check if camera is valid/working
-        self.online = False
-        self.capture = None
-        self.video_frame = QtGui.QLabel()
 
-        self.load_network_stream()
+def minmaxlox(input, roi):
+    grayscale_thermal = cv2.cvtColor(input, cv2.COLOR_BGR2GRAY)
+    roi_grayscale = grayscale_thermal[int(roi[1]):int(roi[1] + roi[3]), int(roi[0]):int(roi[0] + roi[2])]
+    (minVal, maxVal, minLoc, maxLoc) = cv2.minMaxLoc(roi_grayscale)
+    return minVal, maxVal, minLoc, maxLoc
 
-        # Start background frame grabbing
-        self.get_frame_thread = Thread(target=self.get_frame, args=())
-        self.get_frame_thread.daemon = True
-        self.get_frame_thread.start()
+boundary = [([230, 0, 0], [255, 40, 40])] #rgb
+roi_bb_capture = None
+roi_thermal_capture = None
 
-        # Periodically set video frame to display
-        self.timer = QtCore.QTimer()
-        self.timer.timeout.connect(self.set_frame)
-        self.timer.start(.5)
+while True:
+    a, frame_color = color_video.read()
+    b, frame_thermal = thermal_video.read()
+    rgb_thermal = cv2.cvtColor(frame_thermal, cv2.COLOR_BGR2RGB)
 
-        print('Started camera: {}'.format(self.camera_stream_link))
+    # faces = face_cascade.detectMultiScale(frame_color,
+    #                                       scaleFactor=1.3,
+    #                                       minNeighbors=5)
 
-    def load_network_stream(self):
-        """Verifies stream link and open new stream if valid"""
+    # crop color frame to size roughly of thermal frame
+    frame_color = frame_color[color_height_crop:color_height_origial - color_height_crop,
+                  color_width_crop:color_width_original - color_width_crop]
 
-        def load_network_stream_thread():
-            if self.verify_network_stream(self.camera_stream_link):
-                self.capture = cv2.VideoCapture(self.camera_stream_link)
-                self.online = True
-        self.load_stream_thread = Thread(target=load_network_stream_thread, args=())
-        self.load_stream_thread.daemon = True
-        self.load_stream_thread.start()
+    #rescale frames
 
-    def verify_network_stream(self, link):
-        """Attempts to receive a frame from given link"""
 
-        cap = cv2.VideoCapture(link)
-        if not cap.isOpened():
-            return False
-        cap.release()
-        return True
+    # select area of black-body on thermal camera
+    while roi_bb_capture == None:
+        roi_bb_capture = cv2.selectROI(frame_thermal)
+        #roi_bb_rgb = rgb_thermal[int(roi_bb[1]):int(roi_bb[1] + roi_bb[3]), int(roi_bb[0]):int(roi_bb[0] + roi_bb[2])]
+        cv2.destroyAllWindows()
 
-    def get_frame(self):
-        """Reads frame, resizes, and converts image to pixmap"""
+    while roi_thermal_capture == None:
+        roi_thermal_capture = cv2.selectROI(frame_thermal)
+        x, y, w, h = roi_thermal_capture
+        #roi_check_rgb = rgb_thermal[int(roi_check[1]):int(roi_check[1] + roi_check[3]), int(roi_check[0]):int(roi_check[0] + roi_check[2])]
+        #print(roi_check)
+        cv2.destroyAllWindows()
 
-        while True:
-            try:
-                if self.capture.isOpened() and self.online:
-                    # Read next frame from stream and insert into deque
-                    status, frame = self.capture.read()
-                    if status:
-                        self.deque.append(frame)
-                    else:
-                        self.capture.release()
-                        self.online = False
-                else:
-                    # Attempt to reconnect
-                    print('attempting to reconnect', self.camera_stream_link)
-                    self.load_network_stream()
-                    self.spin(2)
-                self.spin(.001)
-            except AttributeError:
-                pass
+    throat_correction = 0 # used to include chin and throat in roi_thermal_face
+    # face detection for-loop & selecting faces with temp > bb
+    # for (x, y, w, h) in roi_check:
+    # roi_thermal_face = rgb_thermal[y - color_height_crop: y + h - color_height_crop + throat_correction,
+    #                    x - color_width_crop: x + w - color_width_crop]
 
-    def spin(self, seconds):
-        """Pause for set amount of seconds, replaces time.sleep so program doesnt stall"""
+    roi_bb_capture_frame = rgb_thermal[int(roi_bb_capture[1]):int(roi_bb_capture[1] + roi_bb_capture[3]), int(roi_bb_capture[0]):int(roi_bb_capture[0] + roi_bb_capture[2])]
+    thermal_roi_capture_frame = rgb_thermal[int(roi_thermal_capture[1]):int(roi_thermal_capture[1] + roi_thermal_capture[3]), int(roi_thermal_capture[0]):int(roi_thermal_capture[0] + roi_thermal_capture[2])]
 
-        time_end = time.time() + seconds
-        while time.time() < time_end:
-            QtGui.QApplication.processEvents()
+    roi_bb_rgb_result = masking(roi_bb_capture_frame, boundary)
+    roi_thermal_result = masking(thermal_roi_capture_frame, boundary)
 
-    def set_frame(self):
-        """Sets pixmap image to video frame"""
-
-        if not self.online:
-            self.spin(1)
-            return
-
-        if self.deque and self.online:
-            # Grab latest frame
-            frame = self.deque[-1]
-
-            # Keep frame aspect ratio
-            if self.maintain_aspect_ratio:
-                self.frame = imutils.resize(frame, width=self.screen_width)
-            # Force resize
+    print(roi_bb_rgb_result)
+    print(roi_thermal_result)
+    try:
+        if ((roi_thermal_result < roi_bb_rgb_result) and (roi_bb_rgb_result > 200)):
+            # bb is hottest & has 'red mark'
+            test = (0, 255, 0)
+            print('bb')
+        elif ((roi_thermal_result > roi_bb_rgb_result) and (roi_thermal_result > 200)):
+            # face is hottest and has 'red mark'
+            test = (0, 0, 255)
+            print('face')
+        elif ((roi_thermal_result == roi_bb_rgb_result) and (roi_thermal_result == 0)):
+            # no red mark in roi's
+            roi_thermal_face_2 = (x, y, w, h + throat_correction)
+            if minmaxlox(frame_thermal, roi_bb_capture)[0] < minmaxlox(frame_thermal, roi_thermal_face_2)[0]:
+                # bb is hotter but has no 'red mark'
+                #print(minmaxlox(frame_thermal, roi_bb_capture)[0])
+                #print(minmaxlox(frame_thermal, roi_thermal_face_2)[0])
+                test = (0, 255, 0)
+                print('bb other')
             else:
-                self.frame = cv2.resize(frame, (self.screen_width, self.screen_height))
+                # face is hotter but has no 'red mark'
+                #print(minmaxlox(frame_thermal, roi_bb_capture)[0])
+                #print(minmaxlox(frame_thermal, roi_thermal_face_2)[0])
+                test = (255, 0, 255)
+                print('face other')
+    except:
+        test = (70, 225, 25)
+        print('fail')
+        continue
+    print(test)
+    cv2.rectangle(frame_color,
+                  (int(x), int(y)),
+                  (int(x + w), int(y + h)),
+                  (50, 50, 50), 5)
+    cv2.rectangle(frame_thermal,
+                  (int(x)+10, int(y)+10),
+                  (int(x + w) + 10, int(y + h) + 10),
+                  test, 3)
 
-            # Add timestamp to cameras
-            cv2.rectangle(self.frame, (self.screen_width-190,0), (self.screen_width,50), color=(0,0,0), thickness=-1)
-            cv2.putText(self.frame, datetime.now().strftime('%H:%M:%S'), (self.screen_width-185,37), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (255,255,255), lineType=cv2.LINE_AA)
+    del roi_thermal_result, roi_bb_rgb_result, test
+    # try:
+    #     del roi_thermal_face_2
+    # except:
+    #     continue
 
-            # Convert to pixmap and set to video frame
-            self.img = QtGui.QImage(self.frame, self.frame.shape[1], self.frame.shape[0], QtGui.QImage.Format_RGB888).rgbSwapped()
-            self.pix = QtGui.QPixmap.fromImage(self.img)
-            self.video_frame.setPixmap(self.pix)
-
-    def get_video_frame(self):
-        return self.video_frame
-
-def exit_application():
-    """Exit program event handler"""
-
-    sys.exit(1)
-
-if __name__ == '__main__':
-
-    # Create main application window
-    app = QtGui.QApplication([])
-    app.setStyleSheet(qdarkstyle.load_stylesheet_pyqt())
-    app.setStyle(QtGui.QStyleFactory.create("Cleanlooks"))
-    mw = QtGui.QMainWindow()
-    mw.setWindowTitle('Camera GUI')
-    mw.setWindowFlags(QtCore.Qt.FramelessWindowHint)
-
-    cw = QtGui.QWidget()
-    ml = QtGui.QGridLayout()
-    cw.setLayout(ml)
-    mw.setCentralWidget(cw)
-    mw.showMaximized()
-
-    # Dynamically determine screen width/height
-    screen_width = QtGui.QApplication.desktop().screenGeometry().width()
-    screen_height = QtGui.QApplication.desktop().screenGeometry().height()
-
-    # Create Camera Widgets
-    username = 'Your camera username!'
-    password = 'Your camera password!'
-
-    # Stream links
-    camera0 = 'rtsp://admin:admin@192.168.1.108:80/cam/realmonitor?channel=1&subtype=0'
-    camera1 = 'rtsp://admin:admin@192.168.1.108:80/cam/realmonitor?channel=2&subtype=0'
-
-
-    # Create camera widgets
-    print('Creating Camera Widgets...')
-    zero = CameraWidget(screen_width//3, screen_height//3, camera0)
-    one = CameraWidget(screen_width//3, screen_height//3, camera1)
-
-    # Add widgets to layout
-    print('Adding widgets to layout...')
-    ml.addWidget(zero.get_video_frame(),0,0,1,1)
-    ml.addWidget(one.get_video_frame(),0,1,1,1)
-
-    print('Verifying camera credentials...')
-
-    mw.show()
-
-    QtGui.QShortcut(QtGui.QKeySequence('Ctrl+Q'), mw, exit_application)
-
-    if(sys.flags.interactive != 1) or not hasattr(QtCore, 'PYQT_VERSION'):
-        QtGui.QApplication.instance().exec_()
+    #frame_thermal = imutils.resize(frame_thermal, width=640)
+    #frame_color = imutils.resize(frame_color, width=640)
+    cv2.imshow('live_video', frame_color)
+    cv2.imshow('thermal_video', frame_thermal)
+    if cv2.waitKey(int(1/60*1000)) & 0xFF == ord('q'):
+        break
+cv2.destroyAllWindows()
+#color_video.stop()
+#thermal_video.stop()

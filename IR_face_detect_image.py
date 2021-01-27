@@ -1,7 +1,7 @@
 import cv2
 import glob
 
-path_img = 'C:\\Users\\Dave\\Downloads\\tufts-face-database-thermal-td-ir\\'
+path_img = 'C:\\Users\\Dave\\Downloads\\tufts-face-database-thermal-td-ir\\20000101_152507_channelV.avi'
 file_imgs = [f for f in glob.glob(path_img + 'TD_IR_E**\\' + '**/*.jpg', recursive=True)]
 path_cascades = 'data\\haarcascades\\'
 files_cascades = [c for c in glob.glob(path_cascades + '**')]
